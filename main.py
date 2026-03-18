@@ -8,6 +8,14 @@ Usage:
 """
 
 import sys
+import logging
+
+# Configure logging (show INFO and above in console).
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 # 1. CONFIGURATION.
 from config import USERNAME, PASSWORD
@@ -22,7 +30,7 @@ from google_sheet import connect_google_sheet, update_google_sheet
 from driver import create_driver
 
 # 5. LOGIN FUNCTIONS.
-from login import login
+from login import login, LoginError, SecurityChallengeError
 
 # 6. XPATH SETTINGS.
 from xpath_config import STATUS_CONNECT
@@ -55,7 +63,7 @@ def run_connect(driver, sheet, df):
                 EC.presence_of_element_located((By.XPATH, STATUS_CONNECT)))
             # Check connection and send without note.
             status = check_connection(driver, row["EMAIL"])
-        except:
+        except Exception:
             status = "CONNECTED"
 
         df.at[index, 'STATUS'] = status
@@ -99,46 +107,67 @@ def main():
         sys.exit(1)
 
     mode = sys.argv[1]
+    driver = None
 
-    # 1. SET UP DRIVER.
-    print("=" * 50)
-    print("SETTING UP DRIVER...")
-    print("=" * 50)
-    driver = create_driver()
+    try:
+        # 1. SET UP DRIVER.
+        print("=" * 50)
+        print("SETTING UP DRIVER...")
+        print("=" * 50)
+        driver = create_driver()
 
-    # 2. CONNECT TO GOOGLE SHEETS.
-    print("=" * 50)
-    print("CONNECTING TO GOOGLE SHEETS...")
-    print("=" * 50)
-    sheet, df = connect_google_sheet()
+        # 2. CONNECT TO GOOGLE SHEETS.
+        print("=" * 50)
+        print("CONNECTING TO GOOGLE SHEETS...")
+        print("=" * 50)
+        sheet, df = connect_google_sheet()
 
-    # 3. DISPLAY GOOGLE SHEETS DATA.
-    print("=" * 50)
-    print("GOOGLE SHEETS DATA:")
-    print("=" * 50)
-    print(df.head())
+        # 3. DISPLAY GOOGLE SHEETS DATA.
+        print("=" * 50)
+        print("GOOGLE SHEETS DATA:")
+        print("=" * 50)
+        print(df.head())
 
-    # 4. LOGIN TO LINKEDIN.
-    print("=" * 50)
-    print("LOGGING IN TO LINKEDIN...")
-    print("=" * 50)
-    login(driver, USERNAME, PASSWORD)
+        # 4. LOGIN TO LINKEDIN.
+        print("=" * 50)
+        print("LOGGING IN TO LINKEDIN...")
+        print("=" * 50)
+        try:
+            login(driver, USERNAME, PASSWORD)
+        except LoginError as e:
+            print(f"\n❌  FATAL: Cannot log in to LinkedIn: {e}")
+            print("   Please check your credentials in config.py and try again.")
+            sys.exit(2)
+        except SecurityChallengeError as e:
+            print(f"\n❌  FATAL: Unresolvable security challenge: {e}")
+            print("   LinkedIn may have flagged this account. Try logging in manually first.")
+            sys.exit(3)
 
-    # 5. EXECUTE TASK.
-    print("=" * 50)
-    print(f"EXECUTING TASK: {mode.upper()}...")
-    print("=" * 50)
+        # 5. EXECUTE TASK.
+        print("=" * 50)
+        print(f"EXECUTING TASK: {mode.upper()}...")
+        print("=" * 50)
 
-    if mode == "connect":
-        run_connect(driver, sheet, df)
-    elif mode == "message":
-        run_message(driver, sheet, df)
+        if mode == "connect":
+            run_connect(driver, sheet, df)
+        elif mode == "message":
+            run_message(driver, sheet, df)
 
-    # 6. END PROGRAM.
-    print("=" * 50)
-    print("PROGRAM COMPLETED!")
-    print("=" * 50)
-    driver.quit()
+        # 6. END PROGRAM.
+        print("=" * 50)
+        print("PROGRAM COMPLETED!")
+        print("=" * 50)
+
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Program interrupted by user.")
+    except Exception as e:
+        print(f"\n❌  Unexpected error: {e}")
+        logging.exception("Unhandled exception in main():")
+        sys.exit(1)
+    finally:
+        if driver:
+            driver.quit()
+            print("INFO: Browser closed.")
 
 
 if __name__ == "__main__":
