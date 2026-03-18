@@ -2,3 +2,6 @@ __pycache__
 .venv
 original/
 config.py
+credential
+*.pkl
+*.png
