@@ -3,5 +3,6 @@ __pycache__
 original/
 config.py
 credential
+chrome_profile/
 *.pkl
 *.png

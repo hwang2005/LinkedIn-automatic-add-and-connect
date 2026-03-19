@@ -3,6 +3,7 @@
 Main entry point for LinkedIn automation.
 
 Usage:
+    python main.py setup      - One-time manual login (opens a visible browser)
     python main.py connect    - Send connection requests
     python main.py message    - Send messages
 """
@@ -30,7 +31,7 @@ from google_sheet import connect_google_sheet, update_google_sheet
 from driver import create_driver
 
 # 5. LOGIN FUNCTIONS.
-from login import login, LoginError, SecurityChallengeError
+from login import login, setup_login, LoginError, SecurityChallengeError
 
 # 6. XPATH SETTINGS.
 from xpath_config import STATUS_CONNECT
@@ -100,13 +101,26 @@ def run_message(driver, sheet, df):
 def main():
     """Main function orchestrating the LinkedIn automation workflow."""
     # Parse command-line argument.
-    if len(sys.argv) < 2 or sys.argv[1] not in ("connect", "message"):
-        print("Usage: python main.py <connect|message>")
+    valid_modes = ("setup", "connect", "message")
+    if len(sys.argv) < 2 or sys.argv[1] not in valid_modes:
+        print("Usage: python main.py <setup|connect|message>")
+        print()
+        print("  setup    - One-time manual login (opens a visible Chrome window)")
         print("  connect  - Send connection requests to profiles")
         print("  message  - Send messages to connected profiles")
+        print()
+        print("Run 'setup' first so LinkedIn saves your session.  After that,")
+        print("'connect' and 'message' will reuse the saved session automatically.")
         sys.exit(1)
 
     mode = sys.argv[1]
+
+    # ── SETUP MODE ─────────────────────────────────────────────
+    if mode == "setup":
+        setup_login()
+        return
+
+    # ── CONNECT / MESSAGE MODE ─────────────────────────────────
     driver = None
 
     try:
@@ -114,7 +128,7 @@ def main():
         print("=" * 50)
         print("SETTING UP DRIVER...")
         print("=" * 50)
-        driver = create_driver()
+        driver = create_driver(headless=True)
 
         # 2. CONNECT TO GOOGLE SHEETS.
         print("=" * 50)
@@ -136,11 +150,11 @@ def main():
             login(driver, USERNAME, PASSWORD)
         except LoginError as e:
             print(f"\n❌  FATAL: Cannot log in to LinkedIn: {e}")
-            print("   Please check your credentials in config.py and try again.")
+            print("   Please run  'python main.py setup'  to log in manually first.")
             sys.exit(2)
         except SecurityChallengeError as e:
             print(f"\n❌  FATAL: Unresolvable security challenge: {e}")
-            print("   LinkedIn may have flagged this account. Try logging in manually first.")
+            print("   Please run  'python main.py setup'  to log in manually first.")
             sys.exit(3)
 
         # 5. EXECUTE TASK.
