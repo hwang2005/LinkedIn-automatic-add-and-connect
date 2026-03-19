@@ -10,6 +10,8 @@ Usage:
 
 import sys
 import logging
+import re
+import unicodedata
 
 # Configure logging (show INFO and above in console).
 logging.basicConfig(
@@ -48,11 +50,109 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 
+def _normalize_column_name(name: str) -> str:
+    """Normalize a column name for case-insensitive and punctuation-insensitive matching."""
+    text = unicodedata.normalize("NFKD", str(name))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]", "", text.strip().lower())
+
+
+def _resolve_column(df, primary_name: str, aliases=(), required=True):
+    """
+    Resolve a DataFrame column by primary name or aliases.
+
+    Matching is case-insensitive and ignores spaces/underscores/punctuation.
+    Returns the actual column name from df.columns, or None if optional and not found.
+    """
+    normalized_to_actual = {
+        _normalize_column_name(col): col for col in df.columns
+    }
+
+    for candidate in (primary_name, *aliases):
+        match = normalized_to_actual.get(_normalize_column_name(candidate))
+        if match is not None:
+            return match
+
+    if required:
+        available_columns = ", ".join([f"'{col}'" for col in df.columns])
+        raise KeyError(
+            f"Missing required column '{primary_name}'. "
+            f"Please add/rename it in Google Sheets. Available columns: {available_columns}"
+        )
+
+    return None
+
+
+def _prepare_message_columns(df):
+    """Ensure message-mode columns exist with expected names used by check_datum()."""
+    message_columns = {
+        "Name": ("Full Name", "First Name", "Contact Name"),
+        "Message": ("Msg", "Template", "Text"),
+    }
+
+    for canonical_name, aliases in message_columns.items():
+        source_col = _resolve_column(df, canonical_name, aliases=aliases, required=True)
+        if source_col != canonical_name:
+            df.rename(columns={source_col: canonical_name}, inplace=True)
+
+    attachment_col = _resolve_column(
+        df, "Attachment", aliases=("File", "Attachment File"), required=False
+    )
+    if attachment_col is None:
+        df["Attachment"] = ""
+    elif attachment_col != "Attachment":
+        df.rename(columns={attachment_col: "Attachment"}, inplace=True)
+
+
+def _map_connect_status(raw_status: str) -> str:
+    """
+    Map raw connect result to the only two allowed sheet values:
+    - 'Đã gửi connect'
+    - 'Không tồn tại'
+    """
+    status_text = str(raw_status or "").upper()
+    positive_markers = (
+        "SUCCESS: CONNECT WITHOUT NOTE!",
+        "PENDING",
+        "CONNECTED",
+    )
+    if any(marker in status_text for marker in positive_markers):
+        return "Đã gửi connect"
+    return "Không tồn tại"
+
+
 def run_connect(driver, sheet, df):
     """Execute LinkedIn connection automation."""
+    link_col = _resolve_column(
+        df,
+        "Link",
+        aliases=("Profile Link", "Profile URL", "URL", "LinkedIn URL", "LinkedIn"),
+        required=True,
+    )
+    email_col = _resolve_column(df, "EMAIL", aliases=("Email", "E-mail"), required=False)
+    status_col = _resolve_column(
+        df,
+        "Trạng thái kết nối",
+        aliases=(
+            "Trang thai ket noi",
+            "Connection Status",
+            "STATUS",
+            "Status",
+            "Result",
+        ),
+        required=False,
+    )
+    if status_col is None:
+        status_col = "Trạng thái kết nối"
+        df[status_col] = ""
+
     for index, row in df.iterrows():
         # Go to profile link.
-        profile_link = row['Link']
+        profile_link = str(row.get(link_col, "")).strip()
+        if not profile_link:
+            df.at[index, status_col] = "Không tồn tại"
+            continue
+
         print(f"Visiting profile: {profile_link}", end=" ")
         driver.get(profile_link)
         display_full_screenshot(driver)
@@ -63,11 +163,11 @@ def run_connect(driver, sheet, df):
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, STATUS_CONNECT)))
             # Check connection and send without note.
-            status = check_connection(driver, row["EMAIL"])
+            status = check_connection(driver, row.get(email_col, "") if email_col else "")
         except Exception:
             status = "CONNECTED"
 
-        df.at[index, 'STATUS'] = status
+        df.at[index, status_col] = _map_connect_status(status)
 
     # Update Google Sheet data.
     update_google_sheet(sheet, df)
@@ -76,8 +176,29 @@ def run_connect(driver, sheet, df):
 
 def run_message(driver, sheet, df):
     """Execute LinkedIn messaging automation."""
+    _prepare_message_columns(df)
+    link_col = _resolve_column(
+        df,
+        "Link",
+        aliases=("Profile Link", "Profile URL", "URL", "LinkedIn URL", "LinkedIn"),
+        required=True,
+    )
+    status_col = _resolve_column(
+        df,
+        "Status",
+        aliases=("STATUS", "Result", "Message Status"),
+        required=False,
+    )
+    if status_col is None:
+        status_col = "Status"
+        df[status_col] = ""
+
     for index, row in df.iterrows():
-        profile_link = row['Link']
+        profile_link = str(row.get(link_col, "")).strip()
+        if not profile_link:
+            df.at[index, status_col] = "ERROR: LINK NOT FOUND!"
+            continue
+
         print(profile_link, end=" ")
 
         # Validate data.
@@ -91,7 +212,7 @@ def run_message(driver, sheet, df):
             display_screenshot(driver)
 
         # Save status.
-        df.at[index, 'Status'] = status
+        df.at[index, status_col] = status
 
     # Update Google Sheet data.
     update_google_sheet(sheet, df)
