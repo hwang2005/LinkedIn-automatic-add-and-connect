@@ -121,8 +121,8 @@ def _prepare_message_columns(df):
 def _map_connect_status(raw_status: str) -> str:
     """
     Map raw connect result to the only two allowed sheet values:
-    - 'ÄÃ£ gá»­i connect'
-    - 'KhÃ´ng tá»“n táº¡i'
+    - 'Đã gửi connect'
+    - 'Không tồn tại'
     """
     status_text = str(raw_status or "").upper()
     positive_markers = (
@@ -131,8 +131,8 @@ def _map_connect_status(raw_status: str) -> str:
         "CONNECTED",
     )
     if any(marker in status_text for marker in positive_markers):
-        return "ÄÃ£ gá»­i connect"
-    return "KhÃ´ng tá»“n táº¡i"
+        return "Đã gửi connect"
+    return "Không tồn tại"
 
 
 def _build_parser():
@@ -407,7 +407,7 @@ def run_connect(driver, sheet, df):
         # Go to profile link.
         profile_link = str(row.get(link_col, "")).strip()
         if not profile_link:
-            df.at[index, status_col] = "KhÃ´ng tá»“n táº¡i"
+            df.at[index, status_col] = "Không tồn tại"
             continue
 
         print(f"Visiting profile: {profile_link}", end=" ")
