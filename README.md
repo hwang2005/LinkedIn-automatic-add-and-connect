@@ -311,34 +311,52 @@ What it does:
 
 ### 3. Cron Mode
 
-This mode creates a cron entry for Linux/macOS.
+This mode helps you create a cron entry for scheduling on Linux/macOS systems so that the script runs automatically at specified times.
 
-Generate a cron line:
+#### Option A: Install via Script (Recommended)
+
+You can automatically add the cron job directly to your user's crontab using the `--install` flag:
+
+```bash
+# Install cron job to run the 'connect' task every day at 9:00 AM
+python main.py cron --task connect --schedule "0 9 * * *" --install
+
+# Install cron job to run the 'message' task every day at 10:00 AM
+python main.py cron --task message --schedule "0 10 * * *" --install
+```
+
+If you just want to preview the cron line without installing it, omit the `--install` flag:
 
 ```bash
 python main.py cron --task connect --schedule "0 9 * * *"
 ```
 
-Install it directly:
+**Useful options:**
+- `--task`: Either `connect` or `message`
+- `--schedule`: A standard cron string like `"0 9 * * *"`
+- `--python-bin`: The path to your Python interpreter (e.g., `/home/user/project/.venv/bin/python`)
+- `--project-dir`: The absolute path to this project directory
+- `--log-file`: The absolute path to a log file for capturing script output
+- `--identifier`: A comment used to label and identify the cron entry
 
-```bash
-python main.py cron --task message --schedule "0 10 * * *" --install
-```
+#### Option B: Manually Add to crontab
 
-Useful options:
+If you prefer to configure crontab manually yourself:
 
-- `--task connect` or `--task message`
-- `--schedule "0 9 * * *"` for the cron schedule
-- `--python-bin` to point to a specific Python interpreter
-- `--project-dir` if the project lives somewhere else
-- `--log-file` to control where the output is saved
-- `--identifier` to label the cron entry
+1. Open your crontab for editing:
+   ```bash
+   crontab -e
+   ```
+2. Add a new line specifying the schedule, the working directory, the path to your Python executable, and the task to run. For example, to run `connect` daily at 9:00 AM:
+   ```bash
+   0 9 * * * cd /path/to/LinkedIn-automatic-add-and-connect && /path/to/.venv/bin/python main.py connect >> logs/cron.log 2>&1
+   ```
+3. Save and close the editor to install the new cron job.
 
-Important notes:
-
-- Cron is intended for Linux/macOS
-- Windows does not use `crontab`; use Task Scheduler instead
-- When `--install` is used, the script updates the current user's crontab
+**Important notes:**
+- `crontab` is for Linux/macOS. On Windows, use Task Scheduler.
+- Make sure to use the absolute path to your virtual environment's Python executable if you installed dependencies in a `.venv`.
+- If Selenium needs to open a visible browser window, you may need to specify the display variable (e.g., include `DISPLAY=:0 ` before the command) or configure Chrome to run in headless mode.
 
 ## Step-by-Step Example
 
