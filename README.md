@@ -144,16 +144,24 @@ python -m pip install --upgrade pip
 
 The script reads and writes data in Google Sheets, so this step is required.
 
-### 1. Create or choose a Google Cloud service account
+### 1. Set up a Google Cloud Project & Enable APIs
 
-Make sure the following APIs are enabled in the Google Cloud project:
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a new project (or select an existing one).
+3. Navigate to **APIs & Services** > **Library**.
+4. Search for the **Google Sheets API** and click **Enable**.
+5. Go back to the Library, search for the **Google Drive API**, and click **Enable**.
 
-- Google Sheets API
-- Google Drive API
+### 2. Create a Service Account & Download the JSON Key
 
-### 2. Download the service account JSON key
+1. In the console, go to **APIs & Services** > **Credentials**.
+2. Click **+ CREATE CREDENTIALS** and select **Service account**.
+3. Enter a name, click **Create and Continue**, then click **Done**.
+4. Click on the email address of the newly created service account in the list.
+5. Go to the **Keys** tab, click **ADD KEY** > **Create new key**.
+6. Select **JSON** and click **Create** to save the file to your computer.
 
-Place the downloaded JSON file in the `credential/` folder.
+Next, place the downloaded JSON file into the project's `credential/` folder.
 
 Example:
 
