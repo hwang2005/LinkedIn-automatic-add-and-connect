@@ -30,7 +30,12 @@ logging.basicConfig(
 )
 
 # 1. CONFIGURATION.
-from config import BASE_DIR, PASSWORD as DEFAULT_PASSWORD, USERNAME as DEFAULT_USERNAME
+from config import (
+    BASE_DIR,
+    PASSWORD as DEFAULT_PASSWORD,
+    USERNAME as DEFAULT_USERNAME,
+    SELENIUM_WAIT_TIMEOUT,
+)
 
 # 2. SUPPORTING FUNCTIONS.
 from support import display_screenshot, display_full_screenshot
@@ -57,6 +62,7 @@ from message_linkedin import check_datum, send_message
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
 
 logger = logging.getLogger(__name__)
@@ -125,6 +131,9 @@ def _map_connect_status(raw_status: str) -> str:
     - 'Không tồn tại'
     """
     status_text = str(raw_status or "").upper()
+    if "TIMEOUT" in status_text:
+        return "TIMEOUT"
+
     positive_markers = (
         "SUCCESS: CONNECT WITHOUT NOTE!",
         "PENDING",
@@ -133,6 +142,19 @@ def _map_connect_status(raw_status: str) -> str:
     if any(marker in status_text for marker in positive_markers):
         return "Đã gửi connect"
     return "Không tồn tại"
+
+
+def _safe_navigate(driver, url: str):
+    """Navigate to URL and return an error string on timeout, or None on success."""
+    try:
+        driver.get(url)
+        return None
+    except TimeoutException:
+        try:
+            driver.execute_script("window.stop();")
+        except Exception:
+            pass
+        return "ERROR: TIMEOUT LOADING PROFILE"
 
 
 def _build_parser():
@@ -411,18 +433,24 @@ def run_connect(driver, sheet, df):
             continue
 
         print(f"Visiting profile: {profile_link}", end=" ")
-        driver.get(profile_link)
+        nav_error = _safe_navigate(driver, profile_link)
+        if nav_error:
+            df.at[index, status_col] = _map_connect_status(nav_error)
+            continue
+
         display_full_screenshot(driver)
         status = ""
 
         # Wait for the page to load before checking connection.
         try:
-            WebDriverWait(driver, 10).until(
+            WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(
                 EC.presence_of_element_located((By.XPATH, STATUS_CONNECT)))
             # Check connection and send without note.
             status = check_connection(driver, row.get(email_col, "") if email_col else "")
-        except Exception:
-            status = "CONNECTED"
+        except TimeoutException:
+            status = "TIMEOUT: CONNECT ACTIONS NOT READY"
+        except Exception as exc:
+            status = f"ERROR: CONNECTION CHECK FAILED ({exc.__class__.__name__})"
 
         df.at[index, status_col] = _map_connect_status(status)
 
@@ -463,10 +491,18 @@ def run_message(driver, sheet, df):
         if isinstance(datum, str):
             status = datum
         else:
-            driver.get(profile_link)
+            nav_error = _safe_navigate(driver, profile_link)
+            if nav_error:
+                status = nav_error
+                df.at[index, status_col] = status
+                continue
+
             # Send message.
             status = send_message(driver, profile_link, datum)
-            display_screenshot(driver)
+            try:
+                display_screenshot(driver)
+            except TimeoutException:
+                print("WARNING: Timed out while capturing message screenshot.")
 
         # Save status.
         df.at[index, status_col] = status
@@ -513,6 +549,10 @@ def _run_automation_mode(mode: str, username: str, password: str):
             print(f"\nâŒ  FATAL: Unresolvable security challenge: {e}")
             print("   Please run  'python main.py setup'  to log in manually first.")
             sys.exit(3)
+        except TimeoutException as e:
+            print(f"\nERROR: Timeout while loading LinkedIn during login: {e}")
+            print("   Please check your network, then rerun.")
+            sys.exit(4)
 
         # 5. EXECUTE TASK.
         print("=" * 50)

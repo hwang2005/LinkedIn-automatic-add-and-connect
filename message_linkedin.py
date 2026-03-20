@@ -8,9 +8,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
-from config import USERNAME, PASSWORD, ATTACHMENT_BASE_URL
+from config import USERNAME, PASSWORD, ATTACHMENT_BASE_URL, SELENIUM_WAIT_TIMEOUT
 from xpath_config import (
     BUTTON_MESSAGE, FIELD_MESSAGE, FIELD_ATTACHMENT,
     BUTTON_SUBMIT_MESSAGE,
@@ -63,8 +63,11 @@ def send_message(driver: webdriver.Chrome, target_profile: str, datum: tuple):
         # Find the message dialog open button.
         c = EC.presence_of_element_located((By.XPATH, BUTTON_MESSAGE))
         try:
-            e = WebDriverWait(driver, 15).until(c)
-        except:
+            e = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(c)
+        except TimeoutException:
+            print("ERROR: TIMEOUT OPENING MESSAGE DIALOG!")
+            return "ERROR: TIMEOUT OPENING MESSAGE DIALOG!"
+        except Exception:
             print("ERROR: OPEN BUTTON NOT FOUND!")
             return "ERROR: OPEN BUTTON NOT FOUND!"
 
@@ -109,9 +112,12 @@ def send_message(driver: webdriver.Chrome, target_profile: str, datum: tuple):
         # Find and click the send button.
         c = EC.presence_of_element_located((By.CLASS_NAME, BUTTON_SUBMIT_MESSAGE))
         try:
-            e = WebDriverWait(driver, 15).until(c)
+            e = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(c)
             driver.execute_script("arguments[0].click();", e)
-        except:
+        except TimeoutException:
+            print("ERROR: TIMEOUT WAITING FOR SUBMIT BUTTON!")
+            return "ERROR: TIMEOUT WAITING FOR SUBMIT BUTTON!"
+        except Exception:
             print("ERROR: SUBMIT BUTTON NOT FOUND!")
             return "ERROR: SUBMIT BUTTON NOT FOUND!"
 
@@ -144,7 +150,13 @@ def main():
         if isinstance(datum, str):
             status = datum
         else:
-            driver.get(profile_link)
+            try:
+                driver.get(profile_link)
+            except TimeoutException:
+                status = "ERROR: TIMEOUT LOADING PROFILE"
+                df.at[index, 'Status'] = status
+                continue
+
             # Send message.
             status = send_message(driver, profile_link, datum)
             display_screenshot(driver)

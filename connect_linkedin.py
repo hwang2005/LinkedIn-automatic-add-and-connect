@@ -8,7 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
-from config import USERNAME, PASSWORD
+from config import USERNAME, PASSWORD, SELENIUM_WAIT_TIMEOUT
 from xpath_config import (
     STATUS_CONNECT, STATUS_MESSAGE, BUTTON_MORE,
     MORE_UNCONNECT, MORE_CONNECT, BUTTON_SEND_WITHOUT_NOTE,
@@ -50,7 +50,9 @@ def find_element_in_list(driver: webdriver.Chrome, e_list: list):
     """Try to find the first available element from a list of XPATHs."""
     for e in e_list:
         try:
-            return WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, e)))
+            return WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(
+                EC.presence_of_element_located((By.XPATH, e))
+            )
         except TimeoutException:
             print(f"Timeout for element: {e}")
         except Exception as e:
@@ -63,7 +65,7 @@ def send_connection(driver: webdriver.Chrome, xpath: str):
     try:
         # Click CONNECT button.
         try:
-            e = WebDriverWait(driver, 10).until(EC.presence_of_element_located(
+            e = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(EC.presence_of_element_located(
                 (By.XPATH, '/html/body/div[6]/div[3]/div/div/div[2]/div/div/main/section[1]/div[2]/div[3]/div/button[1]')))
             e.click()
         except TimeoutException:
@@ -72,11 +74,15 @@ def send_connection(driver: webdriver.Chrome, xpath: str):
             return f"ERROR: FAILED TO CLICK CONNECT BUTTON: {ex}"
 
         # Wait for the send-without-note button to appear.
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, BUTTON_SEND_WITHOUT_NOTE)))
+        WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(
+            EC.presence_of_element_located((By.XPATH, BUTTON_SEND_WITHOUT_NOTE))
+        )
 
         # Click SEND WITHOUT NOTE.
         try:
-            e = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, BUTTON_SEND_WITHOUT_NOTE)))
+            e = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(
+                EC.element_to_be_clickable((By.XPATH, BUTTON_SEND_WITHOUT_NOTE))
+            )
             e.click()
         except TimeoutException:
             return "ERROR: BUTTON SEND WITHOUT NOTE NOT FOUND"
@@ -107,7 +113,7 @@ def check_connection(driver: webdriver.Chrome, email: str, note: str = None):
         # Find and click MORE button.
         print("CHECKING IN MORE", end=" ")
         try:
-            button_more = WebDriverWait(driver, 10).until(
+            button_more = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(
                 EC.presence_of_element_located((By.XPATH, BUTTON_MORE)))
             button_more.click()
         except TimeoutException:
@@ -151,11 +157,13 @@ def main():
 
         # Wait for the page to load before checking connection.
         try:
-            WebDriverWait(driver, 10).until(
+            WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(
                 EC.presence_of_element_located((By.XPATH, STATUS_CONNECT)))
             status = check_connection(driver, row["EMAIL"])
-        except:
-            status = "CONNECTED"
+        except TimeoutException:
+            status = "TIMEOUT: CONNECT ACTIONS NOT READY"
+        except Exception:
+            status = "ERROR: CONNECTION CHECK FAILED"
 
         df.at[index, 'STATUS'] = status
 

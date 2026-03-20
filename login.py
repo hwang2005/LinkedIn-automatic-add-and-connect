@@ -41,6 +41,7 @@ from config import (
     RETRY_BACKOFF_BASE,
     SETUP_LOGIN_TIMEOUT,
     CHROME_PROFILE_DIR,
+    SELENIUM_WAIT_TIMEOUT,
 )
 from support import display_screenshot, capture_full_page_screenshot
 
@@ -81,11 +82,25 @@ class SecurityChallengeError(Exception):
     """Raised when an unresolvable security challenge is encountered."""
 
 
+def _safe_get(driver: webdriver.Chrome, url: str) -> bool:
+    """Navigate while handling page-load timeouts."""
+    try:
+        driver.get(url)
+        return True
+    except TimeoutException:
+        logger.warning("Timed out loading URL: %s", url)
+        try:
+            driver.execute_script("window.stop();")
+        except WebDriverException:
+            pass
+        return False
+
+
 # ===================================================================
 # LOGIN VERIFICATION HELPERS
 # ===================================================================
 
-def _is_logged_in(driver: webdriver.Chrome, timeout: int = 10) -> bool:
+def _is_logged_in(driver: webdriver.Chrome, timeout: int = SELENIUM_WAIT_TIMEOUT) -> bool:
     """Check whether the user is currently logged in.
 
     Tries multiple indicators because LinkedIn's DOM varies by account
@@ -140,19 +155,20 @@ def _try_credential_login(driver: webdriver.Chrome, username: str, password: str
     This is used **only** as a fallback when the saved Chrome profile
     session has expired.
     """
-    driver.get(LINKEDIN_LOGIN)
+    if not _safe_get(driver, LINKEDIN_LOGIN):
+        return False
     time.sleep(3)
 
     handle_cookie_acceptance(driver)
 
     try:
-        username_field = WebDriverWait(driver, 15).until(
+        username_field = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(
             EC.presence_of_element_located((By.XPATH, XPATH_USERNAME))
         )
-        password_field = WebDriverWait(driver, 15).until(
+        password_field = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(
             EC.presence_of_element_located((By.XPATH, XPATH_PASSWORD))
         )
-        login_button = WebDriverWait(driver, 15).until(
+        login_button = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT).until(
             EC.element_to_be_clickable((By.XPATH, XPATH_LOGIN_BUTTON))
         )
     except TimeoutException:
@@ -204,13 +220,13 @@ def setup_login():
     driver = create_driver(headless=False)
 
     try:
-        driver.get(LINKEDIN_LOGIN)
+        _safe_get(driver, LINKEDIN_LOGIN)
         handle_cookie_acceptance(driver)
 
         input("👉  Press ENTER after you have logged in successfully... ")
 
         # Validate
-        driver.get(LINKEDIN_FEED)
+        _safe_get(driver, LINKEDIN_FEED)
         time.sleep(3)
 
         if _is_logged_in(driver, timeout=15):
@@ -241,7 +257,7 @@ def login(driver: webdriver.Chrome, username: str, password: str):
     """
     # ── 1. Check existing session via profile cookies ─────────────
     print("INFO: Checking existing LinkedIn session...")
-    driver.get(LINKEDIN_FEED)
+    _safe_get(driver, LINKEDIN_FEED)
     time.sleep(4)
 
     handle_cookie_acceptance(driver)

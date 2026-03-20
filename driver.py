@@ -9,7 +9,7 @@ treat the browser as a genuine returning user instead of a fresh bot.
 import os
 from selenium import webdriver
 
-from config import WINDOW_SIZE, CHROME_PROFILE_DIR
+from config import WINDOW_SIZE, CHROME_PROFILE_DIR, PAGE_LOAD_TIMEOUT
 
 
 def create_driver(headless: bool = True):
@@ -54,6 +54,7 @@ def create_driver(headless: bool = True):
         options.add_argument("--headless=new")
 
     driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
 
     # Override the webdriver flag via CDP so LinkedIn's JS checks
     # do not see us as automated.

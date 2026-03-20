@@ -8,11 +8,13 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from IPython.display import Image, display
 from PIL import Image as PILImage
 
+from config import REQUEST_TIMEOUT
 
-def download_file(url: str, dest_path: str):
+def download_file(url: str, dest_path: str, timeout: int = REQUEST_TIMEOUT):
     """Download a file from a URL to the destination path (replaces Colab !wget).
 
     - Automatically converts GitHub blob URLs to raw content URLs.
@@ -27,8 +29,13 @@ def download_file(url: str, dest_path: str):
         url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
 
     print(f"INFO: Downloading '{url}' -> '{dest_path}'...")
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
+    try:
+        response = requests.get(url, stream=True, timeout=timeout)
+        response.raise_for_status()
+    except requests.exceptions.Timeout as exc:
+        raise TimeoutError(f"Download timed out after {timeout}s: {url}") from exc
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(f"Download failed: {url} ({exc})") from exc
 
     os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
     with open(dest_path, "wb") as f:
@@ -49,7 +56,11 @@ def display_screenshot(driver: webdriver.Chrome, file_name: str = 'screenshot.pn
 def display_full_screenshot(driver: webdriver.Chrome):
     """Take a full-page screenshot by resizing the window to match page height."""
     # Wait for the body element to be present.
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+    try:
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+    except TimeoutException:
+        print("WARNING: Timed out waiting for page body before screenshot.")
+        return
 
     # Get the full page height.
     total_height = driver.execute_script("return document.body.scrollHeight")
